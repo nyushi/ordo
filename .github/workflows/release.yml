@@ -21,8 +21,26 @@ jobs:
       TAP_REPO: nyushi/homebrew-tap
       FORMULA_PATH: Formula/ordo.rb
     steps:
+      - name: Resolve release tag
+        id: resolve-tag
+        run: |
+            tag=""
+            if [[ "${{ github.ref_type }}" == "tag" ]]; then
+              tag="${{ github.ref_name }}"
+            elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
+              tag="${{ github.event.inputs.tag }}"
+            fi
+            if [[ -z "$tag" ]]; then
+              echo "::error::No release tag provided. Push a tag or supply the 'tag' input."
+              exit 1
+            fi
+            echo "TAG_NAME=$tag" >> "$GITHUB_ENV"
+            echo "value=$tag" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve-tag.outputs.value }}
 
       - name: Build release binary
         run: swift build -c release
@@ -49,12 +67,14 @@ jobs:
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG_NAME }}
+          target_commitish: ${{ env.TAG_NAME }}
           files: ${{ env.ARCHIVE_NAME }}
 
       - name: Update Homebrew tap
         if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
         env:
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ env.TAG_NAME }}
           SHA256: ${{ steps.checksum.outputs.sha }}
         run: |
           VERSION="${TAG_NAME#v}"
