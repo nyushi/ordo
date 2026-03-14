@@ -10,7 +10,16 @@ final class FloatingPanelController: NSWindowController {
         let contentRect = NSRect(x: 200, y: 200, width: 420, height: 520)
         let panel = FloatingPanel(contentRect: contentRect, settings: settings)
         let hostingView = NSHostingView(rootView: rootView)
-        panel.contentView = hostingView
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        let containerView = RoundedPanelContainerView()
+        panel.contentView = containerView
+        containerView.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+        ])
         self.hostingView = hostingView
         super.init(window: panel)
         window?.isReleasedWhenClosed = false
@@ -75,7 +84,7 @@ private final class FloatingPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary] // keep synced with README note
         minSize = NSSize(width: 340, height: 280)
         level = .statusBar
-        backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.9)
+        backgroundColor = .clear
         isOpaque = false
         hasShadow = true
         alphaValue = inactiveAlpha
@@ -156,5 +165,27 @@ private final class FloatingPanel: NSPanel {
         inactiveAlpha = CGFloat(inactive)
         focusAlpha = CGFloat(focused)
         updateTransparency()
+    }
+}
+
+private final class RoundedPanelContainerView: NSView {
+    private let cornerRadius: CGFloat = 18
+    private let fillColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92)
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        layer?.cornerRadius = cornerRadius
+        layer?.backgroundColor = fillColor.cgColor
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = cornerRadius
     }
 }

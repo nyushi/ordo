@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var settings: AppSettings?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        disablePressAndHold()
         let settings = resolvedSettings()
         document = OrdoDocument(fileURL: settings.orgFileURL)
         NSApp.setActivationPolicy(.accessory)
@@ -95,5 +96,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panelController = FloatingPanelController(rootView: rootView, settings: settings)
             panelController?.show()
         }
+    }
+
+    private func disablePressAndHold() {
+        let key = "ApplePressAndHoldEnabled" as CFString
+        CFPreferencesSetAppValue(key, kCFBooleanFalse, kCFPreferencesCurrentApplication)
+        CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
     }
 }

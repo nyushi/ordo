@@ -19,25 +19,20 @@ struct ContentView: View {
                     )
                 }
             )
-            .padding(6)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: NSColor.textBackgroundColor.withAlphaComponent(0.35)))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.white.opacity(0.08))
-            )
+            .padding(.vertical, 4)
+            .padding(.horizontal, -2)
             .frame(minHeight: 320)
         }
-        .padding(12)
+        .padding(.vertical, 2)
+        .padding(.horizontal, 0)
         .frame(minWidth: 360, minHeight: 320)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .center, spacing: 4) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                Spacer()
+                VStack(alignment: .center, spacing: 2) {
                     Text("Ordo")
                         .font(.headline)
                     HStack(spacing: 6) {
@@ -54,7 +49,6 @@ struct ContentView: View {
                         .help("パスをコピー")
                     }
                 }
-
                 Spacer()
             }
         }
