@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      ARCHIVE_NAME: Ordo-macos.zip
+      TAP_REPO: nyushi/homebrew-tap
+      FORMULA_PATH: Formula/ordo.rb
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Capture build output path
+        id: build-info
+        run: echo "bin_path=$(swift build -c release --show-bin-path)" >> "$GITHUB_OUTPUT"
+
+      - name: Package binary
+        run: |
+          BIN_PATH="${{ steps.build-info.outputs.bin_path }}"
+          mkdir -p dist
+          cp "$BIN_PATH/Ordo" dist/Ordo
+          strip -x dist/Ordo || true
+          cd dist
+          zip -r "../${ARCHIVE_NAME}" Ordo
+
+      - name: Compute checksum
+        id: checksum
+        run: |
+          SHA=$(shasum -a 256 "${ARCHIVE_NAME}" | cut -d ' ' -f1)
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE_NAME }}
+
+      - name: Update Homebrew tap
+        if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          SHA256: ${{ steps.checksum.outputs.sha }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          .github/scripts/update-homebrew-formula.sh \
+            "${TAP_REPO}" \
+            "${FORMULA_PATH}" \
+            "${TAG_NAME}" \
+            "${VERSION}" \
+            "${SHA256}"
