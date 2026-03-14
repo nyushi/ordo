@@ -114,8 +114,10 @@ private extension OrdoDocument {
         guard previous != newText else { return }
         text = newText
         guard let undoManager else { return }
-        undoManager.registerUndo(withTarget: self) { @MainActor document in
-            document.applyProgrammaticChange(previous, undoManager: undoManager, actionName: actionName)
+        undoManager.registerUndo(withTarget: self) { document in
+            Task { @MainActor in
+                document.applyProgrammaticChange(previous, undoManager: undoManager, actionName: actionName)
+            }
         }
         undoManager.setActionName(actionName)
     }
