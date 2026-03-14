@@ -4,45 +4,58 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var panelController: FloatingPanelController?
     private let document = OrdoDocument()
-    private var popoverController: StatusPopoverController?
     private var statusItem: NSStatusItem?
+    private var spaceObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let rootView = ContentView(document: document)
-        popoverController = StatusPopoverController(rootView: rootView)
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: "Ordo")
-            button.target = self
-            button.action = #selector(togglePopover(_:))
-        }
+        panelController = FloatingPanelController(rootView: rootView)
+        panelController?.show()
+        configureStatusItem()
         configureGlobalHotKey()
+        observeSpaceChanges()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         GlobalHotKeyCenter.shared.unregister()
+        if let observer = spaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+    }
+
+    private func configureStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        guard let button = statusItem?.button else { return }
+        button.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: "Ordo")
+        button.target = self
+        button.action = #selector(toggleFromStatusItem)
     }
 
     @objc
-    private func togglePopover(_ sender: Any?) {
-        guard
-            let button = statusItem?.button,
-            let popoverController
-        else { return }
-        popoverController.toggle(relativeTo: button.bounds, of: button)
+    private func toggleFromStatusItem() {
+        panelController?.toggleVisibility()
     }
 
     private func configureGlobalHotKey() {
         GlobalHotKeyCenter.shared.register(
             keyCode: UInt32(kVK_Space),
             modifiers: [.command, .option]) { [weak self] in
-                guard
-                    let self,
-                    let button = self.statusItem?.button
-                else { return }
-                self.popoverController?.toggle(relativeTo: button.bounds, of: button)
+                self?.panelController?.toggleVisibility()
             }
+    }
+
+    private func observeSpaceChanges() {
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.panelController?.show()
+            }
+        }
     }
 }

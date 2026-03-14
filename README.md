@@ -5,7 +5,7 @@ macOS 上で常に手元に浮かぶ、org-mode テキストファイル専用�
 ## 特徴
 
 - `~/Documents/Ordo/main.org` だけがデータソース。DB やクラウド機能はありません。
-- メニューバー常駐のポップオーバー。全 Spaces からワンクリック/ホットキーで呼び出せます。
+- 常時前面の半透明 NSPanel。全 Spaces で表示しつつ、メニューバーアイコン/ホットキーからトグルできます。
 - ⌘⌥Space のグローバルホットキー、またはメニューバーアイコンで即表示/非表示。
 - SwiftUI + NSTextView で org のテキストをそのまま編集。TODO / DONE / 見出しを軽くハイライトし、DONE 行は打消し線を表示。
 - TODO / DONE ラベルをクリックすると状態をトグル。Inbox へはクイック追加バーから即座に `** TODO ...` を追記可能。
@@ -29,7 +29,7 @@ swift run  # もっとも簡単な実行方法
 ## 実装メモ
 
 - `OrdoDocument` が org ファイルを唯一のソースとしてロード・自動保存・ファイル監視を担当。`DispatchSourceFileSystemObject` で外部変更を追跡し、`NSTextView` とは `@Published text` で直接バインド。
-- UI は `NSPopover` ベースのメニューバーポップオーバー。ホットキーとアイコンボタンから表示し、Aerospace などのワークスペースでも安定してアクセスできます。
+- UI は `NSPanel` (浮遊パネル) + ステータスバーアイコンの構成。Aerospace などのワークスペースでも常駐し、ホットキーやアイコンからワンクリックで出し入れできます。
 - グローバルホットキーは Carbon の `RegisterEventHotKey` を薄くラップした `GlobalHotKeyCenter` で登録。デフォルトは ⌘⌥Space ですが、実装的には差し替えや拡張が容易です。
 - エディタは SwiftUI から `NSTextView` をラップしてハイライトを独自実装。org の要素を壊さず保存することだけを目的に、軽い色分けに留めています。
 
