@@ -49,12 +49,15 @@ private final class FloatingPanel: NSPanel {
             backing: .buffered,
             defer: false)
         animationBehavior = .utilityWindow
+        // IMPORTANT: This panel must remain non-activating + status bar level so that
+        // Aerospace などの WM に通常ウィンドウとして認識されない。
+        // style/level/collectionBehavior を変更すると常時表示要件が壊れるため注意。
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = false
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary] // keep synced with README note
         minSize = NSSize(width: 340, height: 280)
         level = .statusBar
         backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.9)

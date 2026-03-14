@@ -12,24 +12,9 @@ final class OrdoDocument: ObservableObject {
     }
 
     @Published private(set) var lastSavedAt: Date?
-    @Published private(set) var lastReloadedAt: Date?
     @Published private(set) var statusMessage: String?
 
     let fileURL: URL
-
-    var statusLine: String {
-        var components: [String] = []
-        if let reloaded = lastReloadedAt {
-            components.append("読込 \(Self.timeFormatter.string(from: reloaded))")
-        }
-        if let saved = lastSavedAt {
-            components.append("保存 \(Self.timeFormatter.string(from: saved))")
-        }
-        if let statusMessage {
-            components.append(statusMessage)
-        }
-        return components.joined(separator: " / ")
-    }
 
     private let autosaveDelay: TimeInterval = 0.2
     private var saveWorkItem: DispatchWorkItem?
@@ -40,8 +25,13 @@ final class OrdoDocument: ObservableObject {
 
     init() {
         fileURL = Self.prepareDataFile()
-        text = ""
-        loadFromDisk()
+        if let initialText = try? String(contentsOf: fileURL, encoding: .utf8) {
+            text = initialText
+            NSLog("Ordo: loaded initial text (\(initialText.count) chars)")
+        } else {
+            text = ""
+            NSLog("Ordo: failed to load initial text, starting empty")
+        }
         setupFileWatcher()
     }
 
@@ -52,30 +42,58 @@ final class OrdoDocument: ObservableObject {
     func openInExternalEditor() {
         NSWorkspace.shared.open(fileURL)
     }
+    
+    func copyFilePathToClipboard() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(fileURL.path, forType: .string)
+        statusMessage = "パスをコピーしました"
+    }
 
-    func addInboxTask(title: String) {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        let newLine = "** TODO \(trimmed)\n"
+    @discardableResult
+    func insertTodoEntry(
+        atCharacterIndex index: Int,
+        insertAfterLine: Bool = false,
+        undoManager: UndoManager?
+    ) -> Int? {
         let source = text as NSString
-        let headerPattern = #"(?m)^\*+\s+Inbox.*$"#
-        let headerRange = source.range(of: headerPattern, options: .regularExpression)
-        if headerRange.location != NSNotFound {
-            let lineRange = source.lineRange(for: headerRange)
-            let insertIndex = lineRange.location + lineRange.length
-            text = source.replacingCharacters(
-                in: NSRange(location: insertIndex, length: 0),
-                with: newLine
-            )
+        let clampedIndex = max(0, min(source.length, index))
+        var insertionIndex = clampedIndex
+
+        let baseLineLocation: Int
+        if insertAfterLine {
+            insertionIndex = clampedIndex
+            baseLineLocation = max(0, insertionIndex - 1)
         } else {
-            var builder = text
-            if !builder.hasSuffix("\n") {
-                builder.append("\n")
-            }
-            builder.append("* Inbox\n")
-            builder.append(newLine)
-            text = builder
+            let currentLineRange = source.lineRange(for: NSRange(location: clampedIndex, length: 0))
+            insertionIndex = currentLineRange.location
+            baseLineLocation = currentLineRange.location
         }
+
+        let baseLineRange = source.lineRange(for: NSRange(location: baseLineLocation, length: 0))
+        let baseLineString = source.substring(with: baseLineRange)
+        let indentCount = baseLineString.prefix { $0 == " " || $0 == "\t" }.count
+        let indent = String(baseLineString.prefix(indentCount))
+
+        let level = headingLevelBefore(lineStart: insertionIndex, in: source) ?? 2
+        let stars = String(repeating: "*", count: max(1, level))
+        let todoLine = "\(indent)\(stars) TODO "
+        let todoLineLength = (todoLine as NSString).length
+        var prefix = ""
+        if insertAfterLine {
+            let needsNewline = insertionIndex > 0 && source.character(at: insertionIndex - 1) != 10
+            if needsNewline {
+                prefix = "\n"
+            }
+        }
+        let insertionText = "\(prefix)\(todoLine)\n"
+        let caretIndex = insertionIndex + (prefix as NSString).length + todoLineLength
+        let updated = source.replacingCharacters(
+            in: NSRange(location: insertionIndex, length: 0),
+            with: insertionText
+        )
+        applyProgrammaticChange(updated, undoManager: undoManager, actionName: "TODO を挿入")
+        return caretIndex
     }
 
     deinit {
@@ -89,6 +107,33 @@ final class OrdoDocument: ObservableObject {
 // MARK: - File IO
 
 private extension OrdoDocument {
+    func applyProgrammaticChange(_ newText: String, undoManager: UndoManager?, actionName: String) {
+        let previous = text
+        guard previous != newText else { return }
+        text = newText
+        undoManager?.registerUndo(withTarget: self) { document in
+            document.applyProgrammaticChange(previous, undoManager: undoManager, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
+    }
+
+    func headingLevelBefore(lineStart: Int, in source: NSString) -> Int? {
+        guard lineStart > 0 else { return nil }
+        var foundLevel: Int?
+        let searchRange = NSRange(location: 0, length: lineStart)
+        source.enumerateSubstrings(in: searchRange, options: [.byLines, .reverse]) { substring, _, _, stop in
+            guard let line = substring else { return }
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { return }
+            let level = trimmed.prefix { $0 == "*" }.count
+            if level > 0 {
+                foundLevel = level
+            }
+            stop.pointee = true
+        }
+        return foundLevel
+    }
+
     static func prepareDataFile() -> URL {
         let fm = FileManager.default
         let baseDirectory = fm.homeDirectoryForCurrentUser
@@ -144,7 +189,6 @@ private extension OrdoDocument {
         isApplyingExternalChange = true
         text = contents
         isApplyingExternalChange = false
-        lastReloadedAt = Date()
     }
 
     func setupFileWatcher() {
@@ -217,10 +261,4 @@ private extension OrdoDocument {
 ** DONE 初期テンプレート
 """
 
-    static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
 }
