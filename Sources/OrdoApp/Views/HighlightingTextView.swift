@@ -3,6 +3,7 @@ import SwiftUI
 
 struct HighlightingTextView: NSViewRepresentable {
     @Binding var text: String
+    var taskStates: [String]
     var onInsertTodo: (Int, UndoManager?) -> Int?
 
     func makeCoordinator() -> Coordinator {
@@ -41,15 +42,17 @@ struct HighlightingTextView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
-        textView.textContainerInset = NSSize(width: 6, height: 10)
+        textView.textContainerInset = NSSize(width: 40, height: 10)
         textView.textContainer?.lineFragmentPadding = 6
         textView.backgroundColor = NSColor.clear
         textView.insertionPointColor = NSColor.controlAccentColor
         textView.onInsertTodo = { [weak coordinator = context.coordinator] index in
             coordinator?.insertTodo(at: index)
         }
+        textView.taskStates = taskStates
         textView.string = text
         context.coordinator.textView = textView
+        context.coordinator.taskStates = taskStates
         context.coordinator.applyHighlighting()
 
         scrollView.documentView = textView
@@ -65,6 +68,14 @@ struct HighlightingTextView: NSViewRepresentable {
             context.coordinator.applyHighlighting()
             context.coordinator.isUpdatingFromModel = false
         }
+        if context.coordinator.taskStates != taskStates {
+            context.coordinator.taskStates = taskStates
+            if let orgView = textView as? OrgTextView {
+                orgView.taskStates = taskStates
+            }
+            context.coordinator.applyHighlighting()
+        }
+        context.coordinator.applyPendingSelectionIfNeeded()
     }
 }
 
@@ -74,6 +85,13 @@ extension HighlightingTextView {
         var parent: HighlightingTextView
         weak var textView: NSTextView?
         var isUpdatingFromModel = false
+        var taskStates: [String] = [] {
+            didSet {
+                matcher = TaskStateMatcher(states: taskStates)
+            }
+        }
+        private var matcher = TaskStateMatcher(states: [])
+        private var pendingSelectionRange: NSRange?
 
         init(parent: HighlightingTextView) {
             self.parent = parent
@@ -102,7 +120,8 @@ extension HighlightingTextView {
             textStorage.beginEditing()
             textStorage.setAttributes(defaultAttrs, range: fullRange)
 
-            content.enumerateSubstrings(in: fullRange, options: .byLines) { substring, range, _, _ in
+            content.enumerateSubstrings(in: fullRange, options: .byLines) { [weak self] substring, range, _, _ in
+                guard let self else { return }
                 guard let line = substring else { return }
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
 
@@ -113,20 +132,32 @@ extension HighlightingTextView {
                     ], range: range)
                 }
 
-                if trimmed.contains(" TODO") || trimmed.hasPrefix("TODO") || trimmed.contains("TODO ") {
-                    textStorage.addAttributes([
-                        .foregroundColor: NSColor.systemOrange,
-                        .backgroundColor: NSColor.systemOrange.withAlphaComponent(0.18)
-                    ], range: range)
-                } else if trimmed.contains(" DONE") || trimmed.hasPrefix("DONE") {
-                    textStorage.addAttributes([
-                        .foregroundColor: NSColor.systemGreen.withAlphaComponent(0.9),
-                        .strikethroughStyle: NSUnderlineStyle.single.rawValue
-                    ], range: range)
+                if let match = self.matcher.match(inLineRange: range, string: content) {
+                    self.applyStateHighlight(match: match, in: textStorage)
                 }
             }
 
             textStorage.endEditing()
+        }
+
+        private func applyStateHighlight(match: TaskStateMatch, in textStorage: NSTextStorage) {
+            let stateIndex = match.index
+            let lastIndex = max(taskStates.count - 1, 0)
+            if stateIndex == 0 {
+                textStorage.addAttributes([
+                    .foregroundColor: NSColor.systemOrange,
+                    .backgroundColor: NSColor.systemOrange.withAlphaComponent(0.18)
+                ], range: match.range)
+            } else if stateIndex == lastIndex {
+                textStorage.addAttributes([
+                    .foregroundColor: NSColor.systemGreen.withAlphaComponent(0.9),
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue
+                ], range: match.range)
+            } else {
+                textStorage.addAttributes([
+                    .foregroundColor: NSColor.systemBlue
+                ], range: match.range)
+            }
         }
         
         func insertTodo(at index: Int) {
@@ -134,9 +165,26 @@ extension HighlightingTextView {
             let caretIndex = parent.onInsertTodo(index, textView.undoManager)
             guard let caretIndex else { return }
             let range = NSRange(location: caretIndex, length: 0)
-            DispatchQueue.main.async { [weak textView] in
-                textView?.setSelectedRange(range)
-                textView?.scrollRangeToVisible(range)
+            pendingSelectionRange = range
+            applyPendingSelectionIfNeeded()
+        }
+
+        func applyPendingSelectionIfNeeded() {
+            guard
+                let textView,
+                let pendingRange = pendingSelectionRange
+            else { return }
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                self.isUpdatingFromModel = true
+                if textView.string != self.parent.text {
+                    textView.string = self.parent.text
+                }
+                self.applyHighlighting()
+                self.isUpdatingFromModel = false
+                textView.setSelectedRange(pendingRange)
+                textView.scrollRangeToVisible(pendingRange)
+                self.pendingSelectionRange = nil
             }
         }
     }
@@ -147,12 +195,16 @@ extension HighlightingTextView {
 }
 
 private final class OrgTextView: NSTextView {
-    private static let keywordRegex = try! NSRegularExpression(
-        pattern: #"^\s*(?:[*-]+\s+)?(TODO|DONE)\b"#,
-        options: []
-    )
-    
     var onInsertTodo: ((Int) -> Void)?
+    var taskStates: [String] = [] {
+        didSet {
+            taskStateMatcher = TaskStateMatcher(states: taskStates)
+            if taskStates.isEmpty {
+                hideDoneButton()
+            }
+        }
+    }
+    private var taskStateMatcher = TaskStateMatcher(states: [])
     private var addButton: NSButton = {
         let image = NSImage(systemSymbolName: "plus.circle.fill", accessibilityDescription: "Add TODO")!
         let button = NSButton(image: image, target: nil, action: nil)
@@ -162,15 +214,29 @@ private final class OrgTextView: NSTextView {
         button.contentTintColor = .systemOrange
         return button
     }()
+    private var doneButton: NSButton = {
+        let image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: "Complete")!
+        let button = NSButton(image: image, target: nil, action: nil)
+        button.isBordered = false
+        button.isHidden = true
+        button.contentTintColor = .systemGreen
+        button.refusesFirstResponder = true
+        return button
+    }()
+    private var currentStateMatch: TaskStateMatch?
     private var hoverTrackingArea: NSTrackingArea?
     private var hoverInsertionIndex: Int?
+    private var lastInsertionIndex: Int?
     private let buttonSize: CGFloat = 18
     
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
         addSubview(addButton)
+        addSubview(doneButton)
         addButton.target = self
         addButton.action = #selector(insertTodoFromButton)
+        doneButton.target = self
+        doneButton.action = #selector(toggleCompletionState)
     }
     
     @available(*, unavailable)
@@ -181,6 +247,7 @@ private final class OrgTextView: NSTextView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.acceptsMouseMovedEvents = true
+        updateControlsForSelection()
     }
     
     override func updateTrackingAreas() {
@@ -200,42 +267,42 @@ private final class OrgTextView: NSTextView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        var toggled = false
+        var handled = false
         if event.clickCount == 1 {
-            toggled = toggleKeywordIfNeeded(event: event)
+            handled = handleStateClick(event: event)
         }
+        if handled { return }
         super.mouseDown(with: event)
         window?.makeFirstResponder(self)
-        if toggled {
-            didChangeText()
-        }
     }
 
     override var acceptsFirstResponder: Bool { true }
     
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        updateAddButtonPosition(for: event)
+        updateHoverControls(for: event)
     }
     
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
-        updateAddButtonPosition(for: event)
+        updateHoverControls(for: event)
     }
     
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         hideAddButton()
+        hideDoneButton()
     }
 
-    private func toggleKeywordIfNeeded(event: NSEvent) -> Bool {
+    private func handleStateClick(event: NSEvent) -> Bool {
         guard
             let layoutManager,
             let textContainer,
             let textStorage
         else { return false }
 
-        var location = convert(event.locationInWindow, from: nil)
+        let viewPoint = convert(event.locationInWindow, from: nil)
+        var location = viewPoint
         location.x -= textContainerOrigin.x
         location.y -= textContainerOrigin.y
 
@@ -243,67 +310,42 @@ private final class OrgTextView: NSTextView {
         if glyphIndex >= layoutManager.numberOfGlyphs { return false }
         let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
 
+        let string = textStorage.string as NSString
         guard
-            let rangeInfo = keywordRange(containing: characterIndex, in: textStorage.string as NSString)
+            let match = taskStateMatcher.match(at: characterIndex, in: string),
+            NSLocationInRange(characterIndex, match.range)
         else { return false }
 
-        let (keywordRange, keyword) = rangeInfo
-        guard NSLocationInRange(characterIndex, keywordRange) else { return false }
-
-        let replacement = (keyword == "TODO") ? "DONE" : "TODO"
-        textStorage.replaceCharacters(in: keywordRange, with: replacement)
+        presentStateMenu(for: match, anchorInView: viewPoint)
         return true
     }
-
-    private func keywordRange(containing index: Int, in string: NSString) -> (NSRange, String)? {
-        guard string.length > 0, index < string.length else { return nil }
-        let lineRange = string.lineRange(for: NSRange(location: index, length: 0))
-        let lineString = string.substring(with: lineRange) as NSString
-        guard
-            let match = Self.keywordRegex.firstMatch(
-                in: lineString as String,
-                options: [],
-                range: NSRange(location: 0, length: lineString.length)
-            )
-        else { return nil }
-
-        let keywordRangeInLine = match.range(at: 1)
-        guard keywordRangeInLine.location != NSNotFound else { return nil }
-
-        let keywordRange = NSRange(
-            location: lineRange.location + keywordRangeInLine.location,
-            length: keywordRangeInLine.length
-        )
-        let keyword = string.substring(with: keywordRange)
-        return (keywordRange, keyword)
-    }
     
-    private func updateAddButtonPosition(for event: NSEvent) {
+    private func updateHoverControls(for event: NSEvent) {
         guard
             let layoutManager,
             let textContainer,
             let textStorage
         else {
             hideAddButton()
-            return
-        }
-        
-        var location = convert(event.locationInWindow, from: nil)
-        let buttonGuardX = bounds.width - textContainerInset.width - buttonSize - 4
-        if location.x >= buttonGuardX, hoverInsertionIndex != nil {
-            // マウスがボタン付近に入った際は位置・行情報を固定する
+            hideDoneButton()
             return
         }
 
+        let rawLocation = convert(event.locationInWindow, from: nil)
+        let buttonGuardX = bounds.width - textContainerInset.width - buttonSize - 4
+        let freezeAddButton = rawLocation.x >= buttonGuardX && hoverInsertionIndex != nil
+
+        var location = rawLocation
         location.x -= textContainerOrigin.x
         location.y -= textContainerOrigin.y
 
         let glyphIndex = layoutManager.glyphIndex(for: location, in: textContainer)
         if glyphIndex >= layoutManager.numberOfGlyphs {
             hideAddButton()
+            hideDoneButton()
             return
         }
-        
+
         var glyphLineRange = NSRange(location: 0, length: 0)
         let lineRect = layoutManager.lineFragmentRect(
             forGlyphAt: glyphIndex,
@@ -315,9 +357,18 @@ private final class OrgTextView: NSTextView {
         let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
         let string = textStorage.string as NSString
         let lineRange = string.lineRange(for: NSRange(location: characterIndex, length: 0))
-        hoverInsertionIndex = min(lineRange.location + lineRange.length, string.length)
+        let insertionIndex = min(lineRange.location + lineRange.length, string.length)
+        hoverInsertionIndex = insertionIndex
+        lastInsertionIndex = insertionIndex
+
+        if !freezeAddButton {
+            positionAddButton(rectInView: rectInView)
+        }
+        updateDoneButton(lineRange: lineRange, rectInView: rectInView, string: string)
+    }
+    
+    private func positionAddButton(rectInView: NSRect) {
         let inset = textContainerInset.width
-        // すべての行で右端の同じ位置にボタンを並べ、視覚的なブレをなくす
         let buttonX = max(bounds.width - inset - buttonSize - 2, rectInView.minX)
         let buttonOrigin = NSPoint(
             x: buttonX,
@@ -326,15 +377,148 @@ private final class OrgTextView: NSTextView {
         addButton.frame = NSRect(origin: buttonOrigin, size: NSSize(width: buttonSize, height: buttonSize))
         addButton.isHidden = false
     }
-    
+
     private func hideAddButton() {
         addButton.isHidden = true
-        hoverInsertionIndex = nil
+    }
+
+    private func updateDoneButton(lineRange: NSRange, rectInView: NSRect, string: NSString) {
+        guard
+            !taskStates.isEmpty,
+            let match = taskStateMatcher.match(inLineRange: lineRange, string: string)
+        else {
+            hideDoneButton()
+            return
+        }
+        currentStateMatch = match
+        let buttonX = max(6, textContainerOrigin.x - buttonSize - 4)
+        let origin = NSPoint(
+            x: buttonX,
+            y: rectInView.minY + (rectInView.height - buttonSize) / 2
+        )
+        doneButton.frame = NSRect(origin: origin, size: NSSize(width: buttonSize, height: buttonSize))
+        doneButton.isHidden = taskStates.count < 2
+    }
+
+    private func hideDoneButton() {
+        doneButton.isHidden = true
+        currentStateMatch = nil
     }
     
     @objc private func insertTodoFromButton() {
-        guard let index = hoverInsertionIndex else { return }
+        let index = hoverInsertionIndex ?? lastInsertionIndex ?? textStorage?.length
+        guard let index else { return }
         onInsertTodo?(index)
         hideAddButton()
+    }
+
+    @objc private func applyStateFromMenu(_ sender: NSMenuItem) {
+        guard
+            let payload = sender.representedObject as? StateMenuPayload
+        else { return }
+        applyState(payload.state, to: payload.range)
+    }
+
+    @objc private func toggleCompletionState() {
+        guard
+            let match = currentStateMatch,
+            taskStates.count >= 2
+        else { return }
+        let targetState: String
+        if match.index == taskStates.count - 1 {
+            targetState = taskStates.first ?? match.state
+        } else {
+            targetState = taskStates.last ?? match.state
+        }
+        applyState(targetState, to: match.range)
+    }
+
+    private func presentStateMenu(for match: TaskStateMatch, anchorInView anchor: NSPoint) {
+        guard !taskStates.isEmpty else { return }
+        let menu = NSMenu()
+        for state in taskStates {
+            let payload = StateMenuPayload(state: state, range: match.range)
+            let item = NSMenuItem(title: state, action: #selector(applyStateFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = payload
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: anchor, in: self)
+    }
+
+    private func applyState(_ state: String, to range: NSRange) {
+        guard let textStorage else { return }
+        textStorage.replaceCharacters(in: range, with: state)
+        let newRange = NSRange(location: range.location, length: (state as NSString).length)
+        let normalized = state.uppercased()
+        let index = taskStates.firstIndex(where: { $0.uppercased() == normalized }) ?? 0
+        currentStateMatch = TaskStateMatch(range: newRange, state: state, index: index)
+        needsDisplay = true
+        didChangeText()
+    }
+
+    override func setSelectedRange(_ charRange: NSRange) {
+        super.setSelectedRange(charRange)
+        updateControlsForSelection()
+    }
+
+    override func setSelectedRange(_ charRange: NSRange, affinity: NSSelectionAffinity, stillSelecting flag: Bool) {
+        super.setSelectedRange(charRange, affinity: affinity, stillSelecting: flag)
+        updateControlsForSelection()
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting stillSelectingFlag: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelectingFlag)
+        updateControlsForSelection()
+    }
+
+    private func updateControlsForSelection() {
+        guard
+            let layoutManager,
+            let textStorage
+        else {
+            hideAddButton()
+            hideDoneButton()
+            return
+        }
+        guard layoutManager.numberOfGlyphs > 0 else {
+            hideAddButton()
+            hideDoneButton()
+            return
+        }
+        let caretLocation = min(selectedRange().location, textStorage.length)
+        let characterIndex = max(0, min(caretLocation, max(textStorage.length - 1, 0)))
+        let glyphIndex = layoutManager.glyphIndexForCharacter(at: characterIndex)
+        var glyphLineRange = NSRange(location: 0, length: 0)
+        let lineRect = layoutManager.lineFragmentRect(
+            forGlyphAt: glyphIndex,
+            effectiveRange: &glyphLineRange,
+            withoutAdditionalLayout: true
+        )
+        let rectInView = lineRect.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+        let string = textStorage.string as NSString
+        let lineRange = string.lineRange(for: NSRange(location: characterIndex, length: 0))
+        let insertionIndex = min(lineRange.location + lineRange.length, string.length)
+        hoverInsertionIndex = insertionIndex
+        lastInsertionIndex = insertionIndex
+        let inset = textContainerInset.width
+        let buttonX = max(bounds.width - inset - buttonSize - 2, rectInView.minX)
+        let addOrigin = NSPoint(
+            x: buttonX,
+            y: rectInView.minY + (rectInView.height - buttonSize) / 2
+        )
+        addButton.frame = NSRect(origin: addOrigin, size: NSSize(width: buttonSize, height: buttonSize))
+        addButton.isHidden = false
+        updateDoneButton(lineRange: lineRange, rectInView: rectInView, string: string)
+    }
+}
+
+private final class StateMenuPayload {
+    let state: String
+    let range: NSRange
+
+    init(state: String, range: NSRange) {
+        self.state = state
+        self.range = range
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var document: OrdoDocument
+    @ObservedObject var settings: AppSettings
     @Environment(\.undoManager) private var undoManager
 
     var body: some View {
@@ -9,6 +10,7 @@ struct ContentView: View {
             header
             HighlightingTextView(
                 text: $document.text,
+                taskStates: settings.taskStates,
                 onInsertTodo: { index, undoManager in
                     document.insertTodoEntry(
                         atCharacterIndex: index,
@@ -17,16 +19,16 @@ struct ContentView: View {
                     )
                 }
             )
-                .padding(6)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(nsColor: NSColor.textBackgroundColor.withAlphaComponent(0.35)))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.08))
-                )
-                .frame(minHeight: 320)
+            .padding(6)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: NSColor.textBackgroundColor.withAlphaComponent(0.35)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.white.opacity(0.08))
+            )
+            .frame(minHeight: 320)
         }
         .padding(12)
         .frame(minWidth: 360, minHeight: 320)

@@ -23,9 +23,11 @@ final class OrdoDocument: ObservableObject {
     private var isApplyingExternalChange = false
     private var ignoreWatcherEvents = false
 
-    init() {
-        fileURL = Self.prepareDataFile()
-        if let initialText = try? String(contentsOf: fileURL, encoding: .utf8) {
+    init(fileURL: URL? = nil) {
+        let resolvedURL = fileURL ?? Self.defaultDataFileURL()
+        self.fileURL = resolvedURL
+        Self.prepareDataFile(at: resolvedURL)
+        if let initialText = try? String(contentsOf: resolvedURL, encoding: .utf8) {
             text = initialText
             NSLog("Ordo: loaded initial text (\(initialText.count) chars)")
         } else {
@@ -134,27 +136,26 @@ private extension OrdoDocument {
         return foundLevel
     }
 
-    static func prepareDataFile() -> URL {
-        let fm = FileManager.default
-        let baseDirectory = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents", isDirectory: true)
-            .appendingPathComponent("Ordo", isDirectory: true)
+    static func defaultDataFileURL() -> URL {
+        AppSettings.defaultOrgFileURL()
+    }
 
+    static func prepareDataFile(at url: URL) {
+        let fm = FileManager.default
+        let directory = url.deletingLastPathComponent()
         do {
-            try fm.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
             NSLog("Ordo: failed to create data directory: \(error)")
         }
 
-        let fileURL = baseDirectory.appendingPathComponent("main.org")
-        if !fm.fileExists(atPath: fileURL.path) {
+        if !fm.fileExists(atPath: url.path) {
             do {
-                try defaultTemplate.write(to: fileURL, atomically: true, encoding: .utf8)
+                try defaultTemplate.write(to: url, atomically: true, encoding: .utf8)
             } catch {
                 NSLog("Ordo: failed to write template: \(error)")
             }
         }
-        return fileURL
     }
 
     func scheduleSave() {

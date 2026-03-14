@@ -1,12 +1,17 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
 final class FloatingPanelController: NSWindowController {
-    init(rootView: ContentView) {
+    private let hostingView: NSHostingView<AnyView>
+
+    init(rootView: AnyView, settings: AppSettings) {
         let contentRect = NSRect(x: 200, y: 200, width: 420, height: 520)
-        let panel = FloatingPanel(contentRect: contentRect)
-        panel.contentView = NSHostingView(rootView: rootView)
+        let panel = FloatingPanel(contentRect: contentRect, settings: settings)
+        let hostingView = NSHostingView(rootView: rootView)
+        panel.contentView = hostingView
+        self.hostingView = hostingView
         super.init(window: panel)
         window?.isReleasedWhenClosed = false
     }
@@ -30,15 +35,25 @@ final class FloatingPanelController: NSWindowController {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    func updateRootView(_ view: AnyView) {
+        hostingView.rootView = view
+    }
 }
 
+@MainActor
 private final class FloatingPanel: NSPanel {
     private var trackingArea: NSTrackingArea?
     private var isPointerInside = false
-    private let inactiveAlpha: CGFloat = 0.32
-    private let focusAlpha: CGFloat = 0.96
+    private var inactiveAlpha: CGFloat
+    private var focusAlpha: CGFloat
+    private var transparencyCancellable: AnyCancellable?
+    private let settings: AppSettings
 
-    init(contentRect: NSRect) {
+    init(contentRect: NSRect, settings: AppSettings) {
+        self.settings = settings
+        inactiveAlpha = CGFloat(settings.inactiveTransparency)
+        focusAlpha = CGFloat(settings.focusedTransparency)
         super.init(
             contentRect: contentRect,
             styleMask: [
@@ -65,6 +80,7 @@ private final class FloatingPanel: NSPanel {
         hasShadow = true
         alphaValue = inactiveAlpha
         acceptsMouseMovedEvents = true
+        observeTransparencyChanges()
     }
 
     override var contentView: NSView? {
@@ -119,10 +135,26 @@ private final class FloatingPanel: NSPanel {
     }
 
     private func updateTransparency() {
-        let target = isPointerInside ? focusAlpha : inactiveAlpha
+        let isKey = isKeyWindow
+        let shouldFocus = isPointerInside || isKey
+        let target = shouldFocus ? focusAlpha : inactiveAlpha
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
             self.animator().alphaValue = target
         }
+    }
+
+    private func observeTransparencyChanges() {
+        transparencyCancellable = settings.$inactiveTransparency
+            .combineLatest(settings.$focusedTransparency)
+            .sink { [weak self] inactive, focused in
+                self?.applyTransparency(inactive: inactive, focused: focused)
+            }
+    }
+
+    private func applyTransparency(inactive: Double, focused: Double) {
+        inactiveAlpha = CGFloat(inactive)
+        focusAlpha = CGFloat(focused)
+        updateTransparency()
     }
 }

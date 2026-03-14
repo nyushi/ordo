@@ -1,22 +1,29 @@
 import AppKit
 import Carbon.HIToolbox
+import Combine
 import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: FloatingPanelController?
-    private let document = OrdoDocument()
+    private var document: OrdoDocument?
     private var statusItem: NSStatusItem?
     private var spaceObserver: NSObjectProtocol?
+    private var cancellables = Set<AnyCancellable>()
+    var settings: AppSettings?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let settings = resolvedSettings()
+        document = OrdoDocument(fileURL: settings.orgFileURL)
         NSApp.setActivationPolicy(.accessory)
-        let rootView = ContentView(document: document)
-        panelController = FloatingPanelController(rootView: rootView)
+        guard let document else { return }
+        let rootView = AnyView(ContentView(document: document, settings: settings))
+        panelController = FloatingPanelController(rootView: rootView, settings: settings)
         panelController?.show()
         configureStatusItem()
         configureGlobalHotKey()
         observeSpaceChanges()
+        observeSettingsChanges(settings)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -24,6 +31,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let observer = spaceObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
+    }
+
+    private func resolvedSettings() -> AppSettings {
+        if let settings {
+            return settings
+        }
+        let newSettings = AppSettings()
+        settings = newSettings
+        return newSettings
     }
 
     private func configureStatusItem() {
@@ -56,6 +72,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 self?.panelController?.show()
             }
+        }
+    }
+
+    private func observeSettingsChanges(_ settings: AppSettings) {
+        settings.$orgFilePath
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.reloadDocument()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func reloadDocument() {
+        guard let settings else { return }
+        let newDocument = OrdoDocument(fileURL: settings.orgFileURL)
+        document = newDocument
+        let rootView = AnyView(ContentView(document: newDocument, settings: settings))
+        if let panelController {
+            panelController.updateRootView(rootView)
+        } else {
+            panelController = FloatingPanelController(rootView: rootView, settings: settings)
+            panelController?.show()
         }
     }
 }
