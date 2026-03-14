@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: write
     env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       ARCHIVE_NAME: Ordo-macos.zip
       TAP_REPO: nyushi/homebrew-tap
       FORMULA_PATH: Formula/ordo.rb
@@ -51,9 +52,8 @@ jobs:
           files: ${{ env.ARCHIVE_NAME }}
 
       - name: Update Homebrew tap
-        if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
         env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
           SHA256: ${{ steps.checksum.outputs.sha }}
         run: |
