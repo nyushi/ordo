@@ -15,6 +15,10 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: write
+      actions: read
+      discussions: read
+      issues: read
+      metadata: read
     env:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       ARCHIVE_NAME: Ordo-macos.zip
@@ -66,6 +70,8 @@ jobs:
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         with:
           tag_name: ${{ env.TAG_NAME }}
           target_commitish: ${{ env.TAG_NAME }}
