@@ -37,7 +37,7 @@ class Ordo < Formula
   version "${VERSION}"
   sha256 "${SHA256}"
   license "MIT"
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   def install
     bin.install "Ordo"
