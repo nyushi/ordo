@@ -113,10 +113,11 @@ private extension OrdoDocument {
         let previous = text
         guard previous != newText else { return }
         text = newText
-        undoManager?.registerUndo(withTarget: self) { document in
+        guard let undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { @MainActor document in
             document.applyProgrammaticChange(previous, undoManager: undoManager, actionName: actionName)
         }
-        undoManager?.setActionName(actionName)
+        undoManager.setActionName(actionName)
     }
 
     func headingLevelBefore(lineStart: Int, in source: NSString) -> Int? {
