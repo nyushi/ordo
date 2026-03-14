@@ -49,7 +49,7 @@ final class OrdoDocument: ObservableObject {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(fileURL.path, forType: .string)
-        statusMessage = "パスをコピーしました"
+        statusMessage = "Copied path to clipboard"
     }
 
     @discardableResult
@@ -94,7 +94,7 @@ final class OrdoDocument: ObservableObject {
             in: NSRange(location: insertionIndex, length: 0),
             with: insertionText
         )
-        applyProgrammaticChange(updated, undoManager: undoManager, actionName: "TODO を挿入")
+        applyProgrammaticChange(updated, undoManager: undoManager, actionName: "Insert TODO")
         return caretIndex
     }
 
@@ -174,7 +174,7 @@ private extension OrdoDocument {
             lastSavedAt = Date()
             statusMessage = nil
         } catch {
-            statusMessage = "保存失敗: \(error.localizedDescription)"
+            statusMessage = "Save failed: \(error.localizedDescription)"
         }
         ignoreWatcherEvents = false
     }
@@ -184,7 +184,7 @@ private extension OrdoDocument {
         do {
             contents = try String(contentsOf: fileURL, encoding: .utf8)
         } catch {
-            statusMessage = "読込失敗: \(error.localizedDescription)"
+            statusMessage = "Load failed: \(error.localizedDescription)"
             return
         }
         isApplyingExternalChange = true
@@ -246,20 +246,20 @@ private extension OrdoDocument {
             do {
                 try OrdoDocument.defaultTemplate.write(to: fileURL, atomically: true, encoding: .utf8)
             } catch {
-                statusMessage = "初期ファイル作成失敗: \(error.localizedDescription)"
+                statusMessage = "Failed to create initial file: \(error.localizedDescription)"
             }
         }
     }
 
     static let defaultTemplate = """
 * Inbox
-** TODO ここにタスクを書く
+** TODO Write tasks here
 
 * Today
-** TODO 今日扱うものを移す
+** TODO Move items you'll handle today
 
 * Archive
-** DONE 初期テンプレート
+** DONE Initial template
 """
 
 }

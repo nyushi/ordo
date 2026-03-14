@@ -1,54 +1,11 @@
 # Ordo
 
-macOS 上で常に手元に浮かぶ、org-mode テキストファイル専用の Todo パネルです。アプリ本体は一枚の org ファイルをそのまま表示・編集するだけの薄いレイヤーで、他のエディタや AI から同じファイルを直接操作できます。
+Ordo is a tiny macOS helper that keeps a single org-mode file pinned on top of every Space. Edit the file from any app; Ordo just mirrors it.
 
-## 特徴
-
-- `~/Documents/Ordo/main.org` だけがデータソース。DB やクラウド機能はありません。
-- 常時前面の半透明 NSPanel (非アクティベートパネル)。全 Spaces で表示しつつ、メニューバーアイコン/ホットキーからトグルできます。**この挙動はコア要件のため、`FloatingPanel` の `styleMask`/`level`/`collectionBehavior` を変更しない** こと。
-- ⌘⌥Space のグローバルホットキー、またはメニューバーアイコンで即表示/非表示。ウィンドウは OS/WM から通常ウィンドウとして扱われないため、Aerospace のような tiling WM でも安定して常駐します。
-- SwiftUI + NSTextView で org のテキストをそのまま編集。TODO / DONE / 見出しを軽くハイライトし、DONE 行は打消し線を表示。
-- TODO / DONE ラベルをクリックすると状態をトグル。Inbox へはクイック追加バーから即座に `** TODO ...` を追記可能。
-- 1 秒未満の遅延で自動保存。外部更新はファイル監視で自動再読込。
-- 「Inbox」「Today」などのセクションをそのまま保持する前提で、将来の抽出 UI に備えたシンプルな構造。
-
-## ビルドと実行
+## Quick start
 
 ```bash
-cd ordo
-swift run  # もっとも簡単な実行方法
+swift run
 ```
 
-`swift build` だけでも実行ファイル `.build/debug/Ordo` が生成されるので、`./.build/debug/Ordo` を直接開いても OK です。初回起動時に `~/Documents/Ordo/main.org` を生成し、例として Inbox / Today / Archive を作成します。別エディタでこのファイルを編集しても、Ordo は変更を検知して即座に反映します。
-
-### 使い方のヒント
-
-- TODO / DONE ラベル部分をクリックするとその場で状態が反転します。テキスト編集の流れを崩さずチェックできます。
-- ヘッダー直下の「Inbox に TODO を追加」フィールドに入力して Enter か「追加」ボタンを押すと、`* Inbox` セクション配下に `** TODO ...` が追記されます。空欄時はボタンが無効になるため誤追加を防げます。
-- 行頭にカーソルを乗せると `+` ボタンが現れ、その位置に `** TODO ...` を挿入できます。構造を崩さず素早く追記するのに便利です。
-
-## 実装メモ
-
-- `OrdoDocument` が org ファイルを唯一のソースとしてロード・自動保存・ファイル監視を担当。`DispatchSourceFileSystemObject` で外部変更を追跡し、`NSTextView` とは `@Published text` で直接バインド。
-- UI は `NSPanel` (浮遊パネル) + ステータスバーアイコンの構成。Aerospace などのワークスペースでも常駐し、ホットキーやアイコンからワンクリックで出し入れできます。
-- グローバルホットキーは Carbon の `RegisterEventHotKey` を薄くラップした `GlobalHotKeyCenter` で登録。デフォルトは ⌘⌥Space ですが、実装的には差し替えや拡張が容易です。
-- エディタは SwiftUI から `NSTextView` をラップしてハイライトを独自実装。org の要素を壊さず保存することだけを目的に、軽い色分けに留めています。
-
-## 現時点での制約
-
-- ホットキーは固定 (⌘⌥Space) で、UI からは変更できません。
-- org-mode の複雑な構文 (日付、タグ、折りたたみ等) は解釈しません。テキストを壊さず保存するだけです。
-- 同期/差分マージは行わないため、大量の外部書き換えが競合すると最後に保存した側が勝ちます。
-- 自動保存は 0.8 秒のディレイで単純に全文を書き出しており、巨大ファイルではパフォーマンスに影響が出る可能性があります。
-- アプリ設定やカスタマイズ UI はまだありません (透明度/ホットキー/ファイルパスなども固定)。
-
-## 今後の分離・拡張案
-
-1. **ファイルアクセス層のモジュール化**  
-   `OrdoDocument` を `DocumentProvider` プロトコルに切り出し、ファイル監視や保存ポリシーを他のストレージ (iCloud Drive など) に差し替えられるようにする。
-2. **ビュー状態の分離**  
-   `ContentView` を表示レイヤーだけにし、将来の Today/Inbox 抽出やクリック操作を `OrgOutline` などの軽いパーサに委譲できるよう ViewModel を用意する。
-3. **ホットキー/外観設定の別画面化**  
-   グローバルホットキー、透明度、フォントサイズを設定用データに切り出し、AppStorage などで保存できるよう進化させる。
-
-これらはいずれも org ファイルを真実のソースとする原則を崩さない範囲での分離を意図しています。
+The first launch creates `~/Documents/Ordo/main.org`. Toggle the floating panel from the menu bar icon and type directly into the shared file.

@@ -1,5 +1,4 @@
 import AppKit
-import Carbon.HIToolbox
 import Combine
 import SwiftUI
 
@@ -22,13 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController = FloatingPanelController(rootView: rootView, settings: settings)
         panelController?.show()
         configureStatusItem()
-        configureGlobalHotKey()
         observeSpaceChanges()
         observeSettingsChanges(settings)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        GlobalHotKeyCenter.shared.unregister()
         if let observer = spaceObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
@@ -54,14 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func toggleFromStatusItem() {
         panelController?.toggleVisibility()
-    }
-
-    private func configureGlobalHotKey() {
-        GlobalHotKeyCenter.shared.register(
-            keyCode: UInt32(kVK_Space),
-            modifiers: [.command, .option]) { [weak self] in
-                self?.panelController?.toggleVisibility()
-            }
     }
 
     private func observeSpaceChanges() {

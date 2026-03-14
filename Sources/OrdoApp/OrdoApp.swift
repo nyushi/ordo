@@ -52,7 +52,7 @@ private struct SettingsView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "line.3.horizontal")
                                     .foregroundStyle(.tertiary)
-                                    .help("ドラッグして並び替え")
+                                    .help("Drag to reorder")
                                 TextField("State \(index + 1)", text: Binding(
                                     get: {
                                         guard settings.taskStates.indices.contains(index) else { return "" }
@@ -72,7 +72,7 @@ private struct SettingsView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     .buttonStyle(.plain)
-                                    .help("この状態を削除")
+                                    .help("Remove this state")
                                 }
                             }
                             .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
@@ -102,7 +102,7 @@ private struct SettingsView: View {
                     .padding(8)
                     .background(Color(nsColor: .textBackgroundColor).opacity(0.2))
                     .cornerRadius(6)
-                Button("Browse…") {
+                Button("Browse...") {
                     chooseOrgFile()
                 }
                 Text("Choose an existing org file or create a new one via Finder.")

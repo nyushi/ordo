@@ -46,7 +46,7 @@ struct ContentView: View {
                                 .imageScale(.small)
                         }
                         .buttonStyle(.borderless)
-                        .help("パスをコピー")
+                        .help("Copy path")
                     }
                 }
                 Spacer()

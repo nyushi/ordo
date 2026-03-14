@@ -73,9 +73,9 @@ private final class FloatingPanel: NSPanel {
             backing: .buffered,
             defer: false)
         animationBehavior = .utilityWindow
-        // IMPORTANT: This panel must remain non-activating + status bar level so that
-        // Aerospace などの WM に通常ウィンドウとして認識されない。
-        // style/level/collectionBehavior を変更すると常時表示要件が壊れるため注意。
+        // IMPORTANT: Keep this panel non-activating + status-bar level so
+        // tiling WMs like Aerospace never treat it as a normal window.
+        // Changing style/level/collectionBehavior breaks the always-on behavior.
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         isMovableByWindowBackground = true

@@ -215,7 +215,7 @@ private final class OrgTextView: NSTextView {
         return button
     }()
     private var doneButton: NSButton = {
-        let image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: "Complete")!
+        let image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: "Mark complete")!
         let button = NSButton(image: image, target: nil, action: nil)
         button.isBordered = false
         button.isHidden = true
