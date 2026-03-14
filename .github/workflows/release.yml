@@ -15,10 +15,6 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: write
-      actions: read
-      discussions: read
-      issues: read
-      metadata: read
     env:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       ARCHIVE_NAME: Ordo-macos.zip
