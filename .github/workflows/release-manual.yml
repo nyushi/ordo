@@ -10,7 +10,76 @@ on:
 
 jobs:
   release:
-    uses: ./.github/workflows/release-app.yml
-    with:
-      tag: ${{ inputs.tag }}
-    secrets: inherit
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      ARCHIVE_NAME: Ordo.app.zip
+      TAP_REPO: nyushi/homebrew-tap
+      FORMULA_PATH: Casks/ordo.rb
+      TAG_NAME: ${{ inputs.tag }}
+    steps:
+      - name: Prepare version info
+        run: |
+          version="${TAG_NAME#v}"
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Capture build output path
+        id: build-info
+        run: echo "bin_path=$(swift build -c release --show-bin-path)" >> "$GITHUB_OUTPUT"
+
+      - name: Package app bundle
+        run: |
+          BIN_PATH="${{ steps.build-info.outputs.bin_path }}"
+          mkdir -p dist
+          APP_BUNDLE="dist/Ordo.app"
+          mkdir -p "$APP_BUNDLE/Contents/MacOS"
+          cp "$BIN_PATH/Ordo" "$APP_BUNDLE/Contents/MacOS/Ordo"
+          strip -x "$APP_BUNDLE/Contents/MacOS/Ordo" || true
+          chmod +x "$APP_BUNDLE/Contents/MacOS/Ordo"
+          TEMPLATE=".github/resources/Info.plist"
+          sed "s/__APP_VERSION__/${APP_VERSION}/g" "$TEMPLATE" > "$APP_BUNDLE/Contents/Info.plist"
+          cd dist
+          ditto -c -k --keepParent "Ordo.app" "../${ARCHIVE_NAME}"
+
+      - name: Remove legacy release asset
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        run: gh release delete-asset "${TAG_NAME}" "Ordo-macos.zip" || true
+
+      - name: Compute checksum
+        id: checksum
+        run: |
+          SHA=$(shasum -a 256 "${ARCHIVE_NAME}" | cut -d ' ' -f1)
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          files: ${{ env.ARCHIVE_NAME }}
+          overwrite: true
+
+      - name: Update Homebrew tap
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        env:
+          SHA256: ${{ steps.checksum.outputs.sha }}
+        run: |
+          VERSION="${APP_VERSION}"
+          .github/scripts/update-homebrew-formula.sh \
+            "${TAP_REPO}" \
+            "${FORMULA_PATH}" \
+            "${TAG_NAME}" \
+            "${VERSION}" \
+            "${SHA256}"

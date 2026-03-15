@@ -1,17 +1,10 @@
-name: Release App
+name: Release (tag)
 
 on:
-  workflow_call:
-    inputs:
-      tag:
-        description: "Tag to build"
-        required: true
-        type: string
-    secrets:
-      HOMEBREW_TAP_TOKEN:
-        required: false
-      RELEASE_PAT:
-        required: false
+  push:
+    tags:
+      - "v*"
+    branches: []
 
 jobs:
   release:
@@ -23,17 +16,18 @@ jobs:
       ARCHIVE_NAME: Ordo.app.zip
       TAP_REPO: nyushi/homebrew-tap
       FORMULA_PATH: Casks/ordo.rb
-      TAG_NAME: ${{ inputs.tag }}
     steps:
       - name: Prepare version info
         run: |
-          version="${TAG_NAME#v}"
+          tag="${GITHUB_REF##*/}"
+          version="${tag#v}"
+          echo "TAG_NAME=$tag" >> "$GITHUB_ENV"
           echo "APP_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ github.ref }}
 
       - name: Build release binary
         run: swift build -c release
@@ -45,7 +39,6 @@ jobs:
       - name: Package app bundle
         run: |
           BIN_PATH="${{ steps.build-info.outputs.bin_path }}"
-          APP_VERSION="${APP_VERSION:-${TAG_NAME#v}}"
           mkdir -p dist
           APP_BUNDLE="dist/Ordo.app"
           mkdir -p "$APP_BUNDLE/Contents/MacOS"
