@@ -77,7 +77,7 @@ jobs:
             <string>NSApplication</string>
           </dict>
           </plist>
-PLIST
+          PLIST
           cd dist
           ditto -c -k --keepParent "Ordo.app" "../${ARCHIVE_NAME}"
 
