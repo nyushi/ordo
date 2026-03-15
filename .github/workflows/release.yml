@@ -9,6 +9,7 @@ on:
       tag:
         description: "Tag to build (defaults to ref)"
         required: false
+        type: string
 
 jobs:
   release:
