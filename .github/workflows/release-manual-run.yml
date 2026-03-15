@@ -47,48 +47,8 @@ jobs:
           cp "$BIN_PATH/Ordo" "$APP_BUNDLE/Contents/MacOS/Ordo"
           strip -x "$APP_BUNDLE/Contents/MacOS/Ordo" || true
           chmod +x "$APP_BUNDLE/Contents/MacOS/Ordo"
-          python3 - <<'PY'
-            import os
-            import pathlib
-            import textwrap
-
-            version = os.environ.get("APP_VERSION", "0.0.0")
-            info_path = pathlib.Path("dist/Ordo.app/Contents/Info.plist")
-            info_path.parent.mkdir(parents=True, exist_ok=True)
-            content = textwrap.dedent(
-                f"""\
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>CFBundleDevelopmentRegion</key>
-              <string>en</string>
-              <key>CFBundleExecutable</key>
-              <string>Ordo</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.nyushi.ordo</string>
-              <key>CFBundleInfoDictionaryVersion</key>
-              <string>6.0</string>
-              <key>CFBundleName</key>
-              <string>Ordo</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>CFBundleShortVersionString</key>
-              <string>{version}</string>
-              <key>CFBundleVersion</key>
-              <string>{version}</string>
-              <key>LSMinimumSystemVersion</key>
-              <string>13.0</string>
-              <key>NSHighResolutionCapable</key>
-              <true/>
-              <key>NSPrincipalClass</key>
-              <string>NSApplication</string>
-            </dict>
-            </plist>
-            """
-            )
-            info_path.write_text(content, encoding="utf-8")
-          PY
+          APP_VERSION="${APP_VERSION:-0.0.0}" envsubst < .github/resources/Info.plist.in \
+            > "$APP_BUNDLE/Contents/Info.plist"
           ditto -c -k --keepParent "$APP_BUNDLE" "${ARCHIVE_NAME}"
 
       - name: Remove legacy release asset
