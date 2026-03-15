@@ -46,43 +46,14 @@ jobs:
         run: |
           BIN_PATH="${{ steps.build-info.outputs.bin_path }}"
           APP_VERSION="${APP_VERSION:-${TAG_NAME#v}}"
-          APP_IDENTIFIER="com.nyushi.ordo"
           mkdir -p dist
           APP_BUNDLE="dist/Ordo.app"
           mkdir -p "$APP_BUNDLE/Contents/MacOS"
           cp "$BIN_PATH/Ordo" "$APP_BUNDLE/Contents/MacOS/Ordo"
           strip -x "$APP_BUNDLE/Contents/MacOS/Ordo" || true
           chmod +x "$APP_BUNDLE/Contents/MacOS/Ordo"
-          cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleDevelopmentRegion</key>
-            <string>en</string>
-            <key>CFBundleExecutable</key>
-            <string>Ordo</string>
-            <key>CFBundleIdentifier</key>
-            <string>${APP_IDENTIFIER}</string>
-            <key>CFBundleInfoDictionaryVersion</key>
-            <string>6.0</string>
-            <key>CFBundleName</key>
-            <string>Ordo</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleShortVersionString</key>
-            <string>${APP_VERSION}</string>
-            <key>CFBundleVersion</key>
-            <string>${APP_VERSION}</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>13.0</string>
-            <key>NSHighResolutionCapable</key>
-            <true/>
-            <key>NSPrincipalClass</key>
-            <string>NSApplication</string>
-          </dict>
-          </plist>
-          PLIST
+          TEMPLATE=".github/resources/Info.plist"
+          sed "s/__APP_VERSION__/${APP_VERSION}/g" "$TEMPLATE" > "$APP_BUNDLE/Contents/Info.plist"
           cd dist
           ditto -c -k --keepParent "Ordo.app" "../${ARCHIVE_NAME}"
 
