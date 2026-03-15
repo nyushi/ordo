@@ -37,7 +37,9 @@ jobs:
         run: echo "bin_path=$(swift build -c release --show-bin-path)" >> "$GITHUB_OUTPUT"
 
       - name: Package app bundle
+        shell: bash
         run: |
+          set -euo pipefail
           BIN_PATH="${{ steps.build-info.outputs.bin_path }}"
           mkdir -p dist
           APP_BUNDLE="dist/Ordo.app"
@@ -45,7 +47,7 @@ jobs:
           cp "$BIN_PATH/Ordo" "$APP_BUNDLE/Contents/MacOS/Ordo"
           strip -x "$APP_BUNDLE/Contents/MacOS/Ordo" || true
           chmod +x "$APP_BUNDLE/Contents/MacOS/Ordo"
-          cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
+          cat <<'PLIST' > "$APP_BUNDLE/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -75,8 +77,7 @@ jobs:
 </dict>
 </plist>
 PLIST
-          cd dist
-          ditto -c -k --keepParent "Ordo.app" "../${ARCHIVE_NAME}"
+          ditto -c -k --keepParent "$APP_BUNDLE" "${ARCHIVE_NAME}"
 
       - name: Remove legacy release asset
         env:
