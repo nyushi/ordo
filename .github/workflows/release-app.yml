@@ -49,6 +49,7 @@ jobs:
           chmod +x "$APP_BUNDLE/Contents/MacOS/Ordo"
           APP_VERSION="${APP_VERSION:-0.0.0}" envsubst < .github/resources/Info.plist.in \
             > "$APP_BUNDLE/Contents/Info.plist"
+          codesign --force --deep --sign - --timestamp=none "$APP_BUNDLE"
           ditto -c -k --keepParent "$APP_BUNDLE" "${ARCHIVE_NAME}"
 
       - name: Remove legacy release asset

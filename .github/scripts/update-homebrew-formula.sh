@@ -42,7 +42,7 @@ cask "ordo" do
   name "Ordo"
   desc "Floating org-mode scratchpad for macOS"
   homepage "https://github.com/nyushi/ordo"
-  depends_on macos: :ventura
+  depends_on macos: ">= :ventura"
 
   app "Ordo.app"
 
