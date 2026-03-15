@@ -17,9 +17,9 @@ jobs:
       contents: write
     env:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-      ARCHIVE_NAME: Ordo-macos.zip
+      ARCHIVE_NAME: Ordo.app.zip
       TAP_REPO: nyushi/homebrew-tap
-      FORMULA_PATH: Formula/ordo.rb
+      FORMULA_PATH: Casks/ordo.rb
     steps:
       - name: Resolve release tag
         id: resolve-tag
@@ -34,7 +34,9 @@ jobs:
               echo "::error::No release tag provided. Push a tag or supply the 'tag' input."
               exit 1
             fi
+            version="${tag#v}"
             echo "TAG_NAME=$tag" >> "$GITHUB_ENV"
+            echo "APP_VERSION=$version" >> "$GITHUB_ENV"
             echo "value=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
@@ -49,14 +51,54 @@ jobs:
         id: build-info
         run: echo "bin_path=$(swift build -c release --show-bin-path)" >> "$GITHUB_OUTPUT"
 
-      - name: Package binary
+      - name: Package app bundle
         run: |
           BIN_PATH="${{ steps.build-info.outputs.bin_path }}"
+          APP_VERSION="${APP_VERSION:-${TAG_NAME#v}}"
+          APP_IDENTIFIER="com.nyushi.ordo"
           mkdir -p dist
-          cp "$BIN_PATH/Ordo" dist/Ordo
-          strip -x dist/Ordo || true
+          APP_BUNDLE="dist/Ordo.app"
+          mkdir -p "$APP_BUNDLE/Contents/MacOS"
+          cp "$BIN_PATH/Ordo" "$APP_BUNDLE/Contents/MacOS/Ordo"
+          strip -x "$APP_BUNDLE/Contents/MacOS/Ordo" || true
+          chmod +x "$APP_BUNDLE/Contents/MacOS/Ordo"
+          cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleExecutable</key>
+  <string>Ordo</string>
+  <key>CFBundleIdentifier</key>
+  <string>${APP_IDENTIFIER}</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Ordo</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>${APP_VERSION}</string>
+  <key>CFBundleVersion</key>
+  <string>${APP_VERSION}</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+</dict>
+</plist>
+PLIST
           cd dist
-          zip -r "../${ARCHIVE_NAME}" Ordo
+          ditto -c -k --keepParent "Ordo.app" "../${ARCHIVE_NAME}"
+
+      - name: Remove legacy release asset
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        run: gh release delete-asset "${TAG_NAME}" "Ordo-macos.zip" || true
 
       - name: Compute checksum
         id: checksum
@@ -71,6 +113,7 @@ jobs:
         with:
           tag_name: ${{ env.TAG_NAME }}
           files: ${{ env.ARCHIVE_NAME }}
+          overwrite: true
 
       - name: Update Homebrew tap
         if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}

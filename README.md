@@ -5,7 +5,7 @@ Ordo is a tiny macOS helper that keeps a single org-mode file pinned on top of e
 ## Install
 
 ```bash
-brew install nyushi/tap/ordo
+brew install --cask nyushi/tap/ordo
 ```
 
 ## Build from source
@@ -18,4 +18,4 @@ The first launch creates `~/Documents/Ordo/main.org`. Toggle the floating panel 
 
 ## Releases
 
-Development happens on `develop`; releases happen on `main` and are tagged `vX.Y.Z`. GitHub Actions builds the binary and can update the Homebrew tap automatically. See `docs/RELEASE.md` for the flow.
+Development happens on `develop`; releases happen on `main` and are tagged `vX.Y.Z`. GitHub Actions builds a signed zip containing `Ordo.app` and updates the Homebrew tap automatically. See `docs/RELEASE.md` for the flow.
