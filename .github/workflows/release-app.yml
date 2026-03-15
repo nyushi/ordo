@@ -5,11 +5,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to build (defaults to ref)"
-        required: false
-        type: string
 
 jobs:
   release:
@@ -26,13 +21,13 @@ jobs:
         id: resolve-tag
         run: |
             tag=""
-            if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
               tag="${{ github.ref_name }}"
-            elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
-              tag="${{ github.event.inputs.tag }}"
+            elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+              tag="${{ github.ref_name }}"
             fi
             if [[ -z "$tag" ]]; then
-              echo "::error::No release tag provided. Push a tag or supply the 'tag' input."
+              echo "::error::No release tag provided. Push a tag or dispatch the workflow with --ref <tag>."
               exit 1
             fi
             version="${tag#v}"
