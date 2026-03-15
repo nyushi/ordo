@@ -215,11 +215,10 @@ private extension OrdoDocument {
             queue: DispatchQueue.main
         )
 
-        source.setEventHandler { [weak self] in
+        source.setEventHandler { [weak self, source] in
             guard let self else { return }
             if self.ignoreWatcherEvents { return }
-            guard let currentSource = self.fileSource else { return }
-            let flags = DispatchSource.FileSystemEvent(rawValue: currentSource.data)
+            let flags = DispatchSource.FileSystemEvent(rawValue: source.data)
             self.handleFileEvent(flags)
         }
 
@@ -235,9 +234,15 @@ private extension OrdoDocument {
     }
 
     func handleFileEvent(_ flags: DispatchSource.FileSystemEvent) {
-        if flags.contains(.delete) || flags.contains(.rename) {
+        if flags.contains(.delete) {
             recreateFileIfNeeded()
             setupFileWatcher()
+            loadFromDisk()
+            return
+        }
+        if flags.contains(.rename) {
+            setupFileWatcher()
+            loadFromDisk()
             return
         }
         loadFromDisk()
