@@ -37,8 +37,6 @@ jobs:
         run: echo "bin_path=$(swift build -c release --show-bin-path)" >> "$GITHUB_OUTPUT"
 
       - name: Package app bundle
-        env:
-          INFO_PATH: dist/Ordo.app/Contents/Info.plist
         run: |
           BIN_PATH="${{ steps.build-info.outputs.bin_path }}"
           mkdir -p dist
@@ -47,16 +45,7 @@ jobs:
           cp "$BIN_PATH/Ordo" "$APP_BUNDLE/Contents/MacOS/Ordo"
           strip -x "$APP_BUNDLE/Contents/MacOS/Ordo" || true
           chmod +x "$APP_BUNDLE/Contents/MacOS/Ordo"
-          python3 - "$INFO_PATH" <<'PY'
-import os
-import pathlib
-import sys
-import textwrap
-
-version = os.environ.get("APP_VERSION", "0.0.0")
-info_path = pathlib.Path(sys.argv[1])
-content = textwrap.dedent(
-    f"""\
+          cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -74,9 +63,9 @@ content = textwrap.dedent(
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>{version}</string>
+  <string>${APP_VERSION}</string>
   <key>CFBundleVersion</key>
-  <string>{version}</string>
+  <string>${APP_VERSION}</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>
@@ -85,10 +74,7 @@ content = textwrap.dedent(
   <string>NSApplication</string>
 </dict>
 </plist>
-"""
-)
-info_path.write_text(content, encoding="utf-8")
-PY
+PLIST
           cd dist
           ditto -c -k --keepParent "Ordo.app" "../${ARCHIVE_NAME}"
 
