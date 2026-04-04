@@ -52,6 +52,7 @@ struct HighlightingTextView: NSViewRepresentable {
         textView.taskStates = taskStates
         textView.string = text
         context.coordinator.textView = textView
+        context.coordinator.lastSyncedText = text
         context.coordinator.taskStates = taskStates
         context.coordinator.applyHighlighting()
 
@@ -63,10 +64,12 @@ struct HighlightingTextView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = context.coordinator.textView else { return }
         if textView.string != text {
+            NSLog("HighlightingTextView: updateNSView applying model text (model chars=\(text.count), view chars=\(textView.string.count))")
             context.coordinator.isUpdatingFromModel = true
             textView.string = text
             context.coordinator.applyHighlighting()
             context.coordinator.isUpdatingFromModel = false
+            context.coordinator.lastSyncedText = text
         }
         if context.coordinator.taskStates != taskStates {
             context.coordinator.taskStates = taskStates
@@ -92,6 +95,7 @@ extension HighlightingTextView {
         }
         private var matcher = TaskStateMatcher(states: [])
         private var pendingSelectionRange: NSRange?
+        var lastSyncedText: String?
 
         init(parent: HighlightingTextView) {
             self.parent = parent
@@ -106,6 +110,8 @@ extension HighlightingTextView {
             let latest = textView.string
             parent.text = latest
             applyHighlighting()
+            lastSyncedText = latest
+            NSLog("HighlightingTextView: textDidChange accepted (chars=\(latest.count))")
         }
 
         func applyHighlighting() {
