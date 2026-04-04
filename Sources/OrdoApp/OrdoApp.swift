@@ -7,6 +7,9 @@ struct OrdoApp: App {
     @StateObject private var settings: AppSettings
 
     init() {
+        let buildVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        NSLog("Ordo build \(bundleVersion) (\(buildVersion)) launched at \(Date())")
         let sharedSettings = AppSettings()
         _settings = StateObject(wrappedValue: sharedSettings)
         appDelegate.settings = sharedSettings

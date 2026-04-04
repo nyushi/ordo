@@ -6,6 +6,7 @@ import Foundation
 final class OrdoDocument: ObservableObject {
     @Published var text: String {
         didSet {
+            NSLog("OrdoDocument: text didSet (chars=\(text.count))")
             guard !isApplyingExternalChange else { return }
             scheduleSave()
         }
@@ -16,16 +17,18 @@ final class OrdoDocument: ObservableObject {
 
     let fileURL: URL
 
-    private let autosaveDelay: TimeInterval = 0.2
+    private let autosaveDelay: TimeInterval
     private var saveWorkItem: DispatchWorkItem?
-    private var fileDescriptor: CInt = -1
-    private var fileSource: DispatchSourceFileSystemObject?
+    private var watchDescriptor: CInt = -1
+    private var directorySource: DispatchSourceFileSystemObject?
     private var isApplyingExternalChange = false
     private var ignoreWatcherEvents = false
 
-    init(fileURL: URL? = nil) {
+    init(fileURL: URL? = nil, autosaveDelay: TimeInterval = 0.2) {
+        self.autosaveDelay = autosaveDelay
         let resolvedURL = fileURL ?? Self.defaultDataFileURL()
         self.fileURL = resolvedURL
+        NSLog("OrdoDocument monitoring \(resolvedURL.path)")
         Self.prepareDataFile(at: resolvedURL)
         if let initialText = try? String(contentsOf: resolvedURL, encoding: .utf8) {
             text = initialText
@@ -44,7 +47,7 @@ final class OrdoDocument: ObservableObject {
     func openInExternalEditor() {
         NSWorkspace.shared.open(fileURL)
     }
-    
+
     func copyFilePathToClipboard() {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -99,9 +102,9 @@ final class OrdoDocument: ObservableObject {
     }
 
     deinit {
-        fileSource?.cancel()
-        if fileDescriptor >= 0 {
-            close(fileDescriptor)
+        directorySource?.cancel()
+        if watchDescriptor >= 0 {
+            close(watchDescriptor)
         }
     }
 }
@@ -170,7 +173,13 @@ private extension OrdoDocument {
         DispatchQueue.main.asyncAfter(deadline: .now() + autosaveDelay, execute: workItem)
     }
 
+    func cancelPendingSave() {
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+    }
+
     func saveCurrentText() {
+        cancelPendingSave()
         ignoreWatcherEvents = true
         do {
             try text.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -182,63 +191,81 @@ private extension OrdoDocument {
         ignoreWatcherEvents = false
     }
 
-    func loadFromDisk() {
+    func loadFromDisk(retryCount: Int = 3) {
+        cancelPendingSave()
         let contents: String
         do {
             contents = try String(contentsOf: fileURL, encoding: .utf8)
         } catch {
-            statusMessage = "Load failed: \(error.localizedDescription)"
+            if retryCount > 0 {
+                let delay: DispatchTimeInterval = .milliseconds(80)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.loadFromDisk(retryCount: retryCount - 1)
+                }
+            } else {
+                statusMessage = "Load failed: \(error.localizedDescription)"
+            }
             return
         }
+        NSLog("OrdoDocument: reloading \(fileURL.path)")
         isApplyingExternalChange = true
         text = contents
         isApplyingExternalChange = false
     }
 
-    func setupFileWatcher() {
-        fileSource?.cancel()
-        fileSource = nil
-        if fileDescriptor >= 0 {
-            close(fileDescriptor)
-            fileDescriptor = -1
+    func setupFileWatcher(retryCount: Int = 5) {
+        directorySource?.cancel()
+        directorySource = nil
+        if watchDescriptor >= 0 {
+            close(watchDescriptor)
+            watchDescriptor = -1
         }
 
-        fileDescriptor = open(fileURL.path, O_EVTONLY)
-        guard fileDescriptor >= 0 else {
-            NSLog("Ordo: failed to monitor \(fileURL.path)")
+        let directoryPath = fileURL.deletingLastPathComponent().path
+        watchDescriptor = open(directoryPath, O_EVTONLY)
+        guard watchDescriptor >= 0 else {
+            if retryCount > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(80)) { [weak self] in
+                    self?.setupFileWatcher(retryCount: retryCount - 1)
+                }
+            } else {
+                NSLog("Ordo: failed to monitor directory \(directoryPath)")
+            }
             return
         }
 
         let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fileDescriptor,
+            fileDescriptor: watchDescriptor,
             eventMask: [.write, .delete, .rename],
             queue: DispatchQueue.main
         )
 
-        source.setEventHandler { [weak self] in
+        source.setEventHandler { [weak self, weak source] in
             guard let self else { return }
+            guard let src = source else { return }
+            let flags = DispatchSource.FileSystemEvent(rawValue: src.data)
             if self.ignoreWatcherEvents { return }
-            guard let currentSource = self.fileSource else { return }
-            let flags = DispatchSource.FileSystemEvent(rawValue: currentSource.data)
             self.handleFileEvent(flags)
         }
 
         source.setCancelHandler { [weak self] in
-            if let fd = self?.fileDescriptor, fd >= 0 {
+            if let fd = self?.watchDescriptor, fd >= 0 {
                 close(fd)
             }
-            self?.fileDescriptor = -1
+            self?.watchDescriptor = -1
         }
 
         source.resume()
-        fileSource = source
+        directorySource = source
     }
 
     func handleFileEvent(_ flags: DispatchSource.FileSystemEvent) {
-        if flags.contains(.delete) || flags.contains(.rename) {
+        NSLog("OrdoDocument: handleFileEvent flags=\(flags.rawValue)")
+        if flags.contains(.delete) {
             recreateFileIfNeeded()
+        }
+        if flags.contains(.delete) || flags.contains(.rename) {
             setupFileWatcher()
-            return
         }
         loadFromDisk()
     }
